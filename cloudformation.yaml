@@ -1,0 +1,61 @@
+Description: >
+  This template deploys Grafana to an AWS Fargate Cluster on user-defined VPC and Subnets. Container definition is pulled from the public Docker image for Grafana (https://hub.docker.com/r/grafana/grafana/). An ECS Service ensures Grafana continues to run on the created Cluster. Logging is captured within CloudWatch.
+
+Parameters:
+  VpcId:
+    Description: The VPC to which this cluster should be deployed
+    Type: AWS::EC2::VPC::Id
+
+  Subnets:
+    Description: Choose at least two subnets in this VPC
+    Type: List<AWS::EC2::Subnet::Id>
+
+Resources:
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/grafana-fargate
+  
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: grafana-fargate-cluster
+
+  TaskDefinition: 
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: grafana-fargate-demo
+      RequiresCompatibilities:
+        - FARGATE
+      NetworkMode: awsvpc
+      ExecutionRoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/ecsTaskExecutionRole
+      Memory: 512
+      Cpu: 256
+      ContainerDefinitions:
+        -
+          Name: grafana-container
+          Image: grafana/grafana
+          Memory: 512
+          Cpu: 256
+          PortMappings:
+            -
+              ContainerPort: 3000
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+                awslogs-group: "/ecs/grafana-fargate"
+                awslogs-region: !Ref AWS::Region
+                awslogs-stream-prefix: "dashboard"
+
+  ServiceDefinition:
+    Type: AWS::ECS::Service
+    Properties:
+      LaunchType: FARGATE
+      TaskDefinition: !Ref TaskDefinition
+      Cluster: !Ref ECSCluster
+      ServiceName: grafana-dashboard-service
+      DesiredCount: 1
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          Subnets: !Ref Subnets
